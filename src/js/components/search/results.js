@@ -1,57 +1,63 @@
 import React from 'react';
+import PropTypes from 'prop-types';
 
 import {
   Row,
   Col,
   Media,
-  ListGroup
+  ListGroup,
 } from 'react-bootstrap';
 
 import Pagination from '@vlsergey/react-bootstrap-pagination';
 
-import { agreeWithNum } from '../../utils/agree-with-num';
+import { Link } from 'react-router-dom';
+import agreeWithNum from '../../utils/agree-with-num';
 import Sugar from '../../utils/sugar';
 
 class GenericList extends React.Component {
-  key(item) {
-    throw "Not Implemented";
+  static propTypes = {
+    items: PropTypes.array.isRequired,
   }
 
-  thumbnail(item) {
-    throw "Not Implemented";
+  key() {
+    throw new Error('Not Implemented');
   }
 
-  url(item) {
-    throw "Not Implemented";
+  thumbnail() {
+    throw new Error('Not Implemented');
   }
 
-  description(item) {
-    throw "Not Implemented";
+  url() {
+    throw new Error('Not Implemented');
+  }
+
+  description() {
+    throw new Error('Not Implemented');
   }
 
   items() {
-    return this.props.items.map((item) => {
-      return (
-        <ListGroup.Item key={this.key(item)}>
-          <Media>
-            <img width={128} className="mr-3" src={this.thumbnail(item)} />
+    const { items } = this.props;
 
-            <Media.Body>
-              <Row>
-                <Col>
-                  <a href={this.url(item)}>{item.name}</a>
-                </Col>
-              </Row>
-              <Row>
-                <Col>
-                  {this.description(item)}
-                </Col>
-              </Row>
-            </Media.Body>
-          </Media>
-        </ListGroup.Item>
-      );
-    });
+    return items.map((item) => (
+      <ListGroup.Item key={this.key(item)}>
+        <Media>
+          <img width={128} className="mr-3" src={this.thumbnail(item)} alt="thumbnail" />
+
+          <Media.Body>
+            <Row>
+              <Col>
+                <Link to={this.url(item)}>{item.name}</Link>
+              </Col>
+            </Row>
+            <Row>
+              <Col>
+                {this.description(item)}
+              </Col>
+            </Row>
+          </Media.Body>
+        </Media>
+      </ListGroup.Item>
+    ));
   }
 
   render() {
@@ -59,7 +65,7 @@ class GenericList extends React.Component {
       <ListGroup variant="flush">
         {this.items()}
       </ListGroup>
-    )
+    );
   }
 }
 
@@ -69,15 +75,11 @@ class SegmentsList extends GenericList {
   }
 
   thumbnail(segment) {
-    if (segment.youtube) {
-      return `https://img.youtube.com/vi/${segment.youtube}/mqdefault.jpg`;
-    } else {
-      return '/static/images/no-preview.png';
-    }
+    return segment.thumbnail;
   }
 
   url(segment) {
-    return `/links/${segment.games[0]}.html#${segment.segment}`;
+    return segment.url;
   }
 
   description(segment) {
@@ -95,27 +97,23 @@ class GamesList extends GenericList {
   }
 
   thumbnail(game) {
-    let segment = this.props.data.segments.by('segment', game.segment);
-
-    if (segment.youtube) {
-      return `https://img.youtube.com/vi/${segment.youtube}/mqdefault.jpg`;
-    } else {
-      return '/static/images/no-preview.png';
-    }
+    const { data: { segments } } = this.props;
+    const segment = segments.by('segment', game.segment);
+    return segment.thumbnail;
   }
 
   description(game) {
     let res = '';
-    let segments = game.segments;
-    let streams = game.streams;
+    const { segments } = game;
+    const { streams } = game;
 
     res += `${streams} ${agreeWithNum(streams, 'стрим', ['', 'а', 'ов'])}`;
 
     if (streams > 1) {
-      res += ` с ${Sugar.Date.short(segments[0].date)}`
-      res += ` по ${Sugar.Date.short(segments[segments.length - 1].date)}`
+      res += ` с ${Sugar.Date.short(segments[0].date)}`;
+      res += ` по ${Sugar.Date.short(segments[segments.length - 1].date)}`;
     } else {
-      res += ' ' + Sugar.Date.short(segments[0].date);
+      res += ` ${Sugar.Date.short(segments[0].date)}`;
     }
 
     return res;
@@ -123,27 +121,45 @@ class GamesList extends GenericList {
 }
 
 class ResultsPagination extends React.Component {
+  static propTypes = {
+    items: PropTypes.array.isRequired,
+    page: PropTypes.number,
+    max: PropTypes.number,
+    renderer: PropTypes.func.isRequired,
+    rendererProps: PropTypes.object,
+    onPageChange: PropTypes.func.isRequired,
+  }
+
+  static defaultProps = {
+    page: 0,
+    max: 10,
+    rendererProps: {},
+  }
+
   items() {
-    if (this.props.items.length <= this.props.max) {
-      return this.props.items;
+    const { items, max, page } = this.props;
+
+    if (items.length <= max) {
+      return items;
     }
 
-    return this.props.items.slice(
-      this.props.page * this.props.max,
-      (this.props.page + 1) * this.props.max
-    );
+    return items.slice(page * max, (page + 1) * max);
   }
 
   content() {
-    return React.createElement(this.props.renderer, {
-      ...this.props.rendererProps,
+    const { renderer, rendererProps } = this.props;
+
+    return React.createElement(renderer, {
+      ...rendererProps,
       items: this.items(),
-      key: 'content'
+      key: 'content',
     });
   }
 
   navigator() {
-    let pages = Math.ceil(this.props.items.length / this.props.max);
+    const { items, max, page, onPageChange } = this.props;
+
+    const pages = Math.ceil(items.length / max);
 
     if (pages <= 1) {
       return null;
@@ -154,22 +170,21 @@ class ResultsPagination extends React.Component {
         <Col className="d-flex justify-content-center">
           <Pagination
             totalPages={pages}
-            value={this.props.page}
+            value={page}
             showFirstLast={false}
             atBeginEnd={1}
             aroundCurrent={2}
-            onChange={({ target: { value }}) => {
-              this.props.onPageChange(value);
-            }} />
+            onChange={({ target: { value } }) => onPageChange(value)}
+          />
         </Col>
       </Row>
-    )
+    );
   }
 
   render() {
     return [
       this.content(),
-      this.navigator()
+      this.navigator(),
     ];
   }
 }

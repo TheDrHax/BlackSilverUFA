@@ -8,10 +8,10 @@ DEBUG = os.environ.get('DEBUG', '0') == '1'
 
 
 if DEBUG:
-    config['prefix'] = config['dev_prefix']
+    config['prefix'] = ''
 
     for path, mount in config['repos']['mounts'].items():
         if not path.startswith('$PREFIX/chats'):
             continue
 
-        mount['prefix'] = path.replace('$PREFIX', config['prefix'])
+        mount['prefix'] = path.replace('$PREFIX', '')

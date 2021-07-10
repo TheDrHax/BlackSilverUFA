@@ -1,48 +1,43 @@
+import { last, zip } from 'lodash';
+
 const resume = JSON.parse(localStorage.getItem('resume_playback')) || {};
 
-class SavedPosition {
-  constructor(stream) {
-    this.ids = stream.hash.split(',');
-
-    if (stream.offsets) {
-      this.offsets = stream.offsets.split(',').map((t) => +t);
-    } else if (stream.offset) {
-      this.offsets = [stream.offset];
-    } else {
-      this.offsets = [0];
-    }
+export default class SavedPosition {
+  constructor(segment) {
+    this.streams = segment.streams;
+    this.offsets = segment.offsets || [segment.abs_start];
   }
 
   set(t) {
     let match = null;
+    t = Math.round(t);
 
-    this.ids.map((id, i) => {
-      let offset = this.offsets[i];
-
+    zip(this.streams, this.offsets).forEach(([stream, offset]) => {
       if (t >= offset) {
-        match = [id, offset];
+        match = { stream, offset };
       }
 
-      delete resume[id];
+      delete resume[stream];
     });
 
-    if (match !== null) {
-      resume[match[0]] = t - match[1];
+    if (match) {
+      const { stream, offset } = match;
+      resume[stream] = t - offset;
       localStorage.setItem('resume_playback', JSON.stringify(resume));
     }
   }
 
   get() {
-    let positions = this.ids.map((id, i) => {
-      return +resume[id] + this.offsets[i];
-    }).filter((x) => !isNaN(x));
-
-    return positions[positions.length - 1];
+    return last(
+      this.streams
+        .map((id, i) => +resume[id] + this.offsets[i])
+        .filter((x) => !Number.isNaN(x)),
+    );
   }
 
   exists() {
-    for (let i = 0; i < this.ids.length; i++) {
-      if (resume[this.ids[i]]) {
+    for (let i = 0; i < this.streams.length; i += 1) {
+      if (resume[this.streams[i]]) {
         return true;
       }
     }
@@ -50,5 +45,3 @@ class SavedPosition {
     return false;
   }
 }
-
-export { SavedPosition };

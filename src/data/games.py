@@ -1,9 +1,7 @@
 import attr
-from typing import Dict, List
 from cached_property import cached_property
 
 from .streams import streams, SegmentReference
-from .config import config
 from .blacklist import Blacklist, blacklist
 from ..utils import load_json, join, json_escape, indent
 
@@ -37,21 +35,6 @@ class Game:
 
         self.streams = refs
 
-    @property
-    def stream_count(self):
-        return len(set([s.twitch for s in self.streams]))
-
-    @property
-    def thumbnail(self):
-        if isinstance(self.cover, int):
-            return self.streams[self.cover].thumbnail
-        else:
-            return self.cover
-
-    @property
-    def filename(self):
-        return f'/links/{self.id}.html'
-
     @cached_property
     def blacklist(self):
         return blacklist + self._blacklist
@@ -61,9 +44,12 @@ class Game:
         return self.streams[self.cover].stream.date
 
     @join()
-    def to_json(self):
-        keys = ['name', 'category', 'type', 'id',
-                'streams', 'cover', '_blacklist']
+    def to_json(self, compiled: bool = False) -> str:
+        if compiled:
+            keys = ['name', 'category', 'type', 'id', 'streams', 'cover']
+        else:
+            keys = ['name', 'category', 'type', 'id',
+                    'streams', 'cover', '_blacklist']
 
         yield '{\n  '
 
@@ -74,7 +60,7 @@ class Game:
 
             if key == 'streams':
                 yield ',\n  "streams": [\n'
-                refs = [ref.to_json() for ref in self.streams]
+                refs = [ref.to_json(compiled) for ref in self.streams]
                 yield indent(',\n'.join(refs), 4)
                 yield '\n  ]'
                 continue
@@ -122,7 +108,7 @@ class Games(list):
             self.append(game)
 
     @join()
-    def to_json(self) -> str:
+    def to_json(self, compiled: bool = False) -> str:
         yield '[\n'
 
         first = True
@@ -132,18 +118,18 @@ class Games(list):
             else:
                 first = False
 
-            yield indent(game.to_json(), 2)
+            yield indent(game.to_json(compiled), 2)
 
         yield '\n]'
 
     def __str__(self):
         return self.to_json()
 
-    def save(self, filename: str = None):
+    def save(self, filename: str = None, compiled: bool = False):
         if filename is None:
             filename = self.filename
 
-        data = self.to_json()
+        data = self.to_json(compiled)
 
         with open(filename, 'w') as fo:
             fo.write(data)

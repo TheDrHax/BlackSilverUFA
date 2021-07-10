@@ -128,12 +128,6 @@ class Segment:
                 names.append(sr.full_name)
         return ' / '.join(names)
 
-    @property
-    def url(self) -> str:
-        """Return relative URL of the first reference to this segment"""
-        if len(self.references) > 0:
-            return self.references[0].url
-
     def reference(self):
         return SegmentReference(
             parent=self.references[0],
@@ -250,13 +244,6 @@ class Segment:
         else:
             return self.twitch + '.' + str(self.segment)
 
-    @property
-    def thumbnail(self):
-        if self.youtube:
-            return f'https://img.youtube.com/vi/{self.youtube}/mqdefault.jpg'
-        else:
-            return '/static/images/no-preview.png'
-
     @join()
     def to_json(self, compiled=False):
         if not compiled:
@@ -267,7 +254,7 @@ class Segment:
             keys = ['youtube', 'official',
                     'abs_start', 'abs_end', 'duration']
             multiline_keys = ['name', 'date', 'direct', 'offsets', 'cuts',
-                              'torrent', 'games']
+                              'torrent', 'games', 'subtitles']
 
         def get_attr(key):
             if key in self.fallbacks and not compiled:
@@ -310,6 +297,9 @@ class Segment:
             if isinstance(value, Timecode):
                 if not compiled and value == 0:
                     continue
+                
+                if compiled:
+                    value = int(value)
 
             if not first:
                 yield ', '
@@ -338,7 +328,10 @@ class Segment:
                         value = value.to_list()
                 else:
                     continue
-            
+
+            if key == 'subtitles' and self.stream.type is StreamType.NO_CHAT:
+                continue
+
             if key == 'cuts':
                 if len(value) == 0:
                     continue
@@ -449,66 +442,6 @@ class SegmentReference:
 
         return value
 
-    def attrs(self):
-        attrs = []
-
-        def escape_attr(attr):
-            if type(attr) is str:
-                return attr.replace('"', '&quot;')
-            else:
-                return str(attr)
-
-        def add(key, func=lambda x: x, check=lambda x: x is not None):
-            value = getattr(self, key)
-            if check(value):
-                value = func(value)
-                value = escape_attr(value)
-                attrs.append(f'data-{key}="{value}"')
-
-        add('hash')
-        add('offset', lambda x: x().value, lambda x: x() != 0)
-
-        if self.stream.type is not StreamType.NO_CHAT:
-            add('subtitles')
-
-        if self.stream.type is StreamType.JOINED:
-            add('offsets',
-                lambda x: ','.join([str(t.value) for t in x]),
-                lambda x: len(x) != 0)
-
-        add('start', lambda x: int(x - self.offset(x)),
-            lambda x: x != 0 or self.force_start)
-        add('end', lambda x: int(x - self.offset(x)), lambda x: x != 0)
-
-        for key in ['name', 'youtube', 'direct']:
-            add(key)
-
-        if self.force_start:
-            add('force_start', lambda x: 'true' if x else 'false')
-
-        if not self.playable:
-            attrs.append('style="display: none"')
-
-        return ' '.join(attrs)
-
-    def mpv_file(self):
-        if self.youtube:
-            return 'ytdl://' + self.youtube
-        elif self.direct:
-            return self.direct
-
-    def mpv_args(self):
-        res = ''
-        if self.stream.type is not StreamType.NO_CHAT:
-            res += f'--sub-file={self.subtitles} '
-        if self.offset() != 0:
-            res += f'--sub-delay={-int(self.offset())} '
-        if self.start != 0 or self.force_start:
-            res += f'--start={int(self.start - self.offset(self.start))} '
-        if self.end != 0:
-            res += f'--end={int(self.end - self.offset(self.end))} '
-        return res.strip()
-
     @property
     def name(self) -> str:
         names = []
@@ -536,19 +469,18 @@ class SegmentReference:
     def abs_end(self):
         return self.subrefs[-1].abs_end
 
-    @property
-    def url(self):
-        """Return relative URL of this reference"""
-        return f'{self.game.filename}#{self.hash}'
-
     @join()
-    def to_json(self):
-        keys = ['name', 'twitch', 'segment', 'start', 'end',
-                'force_start', 'subrefs']
-        multiline_keys = ['note', '_blacklist']
+    def to_json(self, compiled: bool = False):
+        if compiled:
+            keys = ['name', 'hash', 'start', 'end', 'force_start']
+            multiline_keys = []
+        else:
+            keys = ['name', 'twitch', 'segment', 'start', 'end',
+                    'force_start', 'subrefs']
+            multiline_keys = ['note', '_blacklist']
 
         def inherited(key):
-            if key in ['name', 'twitch', 'segment', '_blacklist']:
+            if key in ['name', 'twitch', 'hash', 'segment', '_blacklist']:
                 return False
 
             if hasattr(self.parent, key):
@@ -567,10 +499,10 @@ class SegmentReference:
         for key in keys:
             value = getattr(self, key)
 
-            if value is None or inherited(key):
+            if value is None or inherited(key) and not compiled:
                 continue
 
-            if key in ['name', 'start'] and len(self.subrefs) > 1:
+            if key in ['name', 'start'] and len(self.subrefs) > 1 and not compiled:
                 continue
 
             if key in ['start', 'end'] and value == 0:
@@ -584,10 +516,19 @@ class SegmentReference:
                     yield f', "segment": {self.parent.segment}'
                 continue
 
+            if key == 'force_start' and not value:
+                continue
+
+            if compiled and key == 'hash':
+                key = 'segment'
+
             if not first:
                 yield ', '
             else:
                 first = False
+
+            if compiled and isinstance(value, Timecode):
+                value = int(value)
 
             if key == 'subrefs':
                 yield f'"{key}": [\n  '

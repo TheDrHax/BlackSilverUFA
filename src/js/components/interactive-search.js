@@ -1,12 +1,6 @@
 import React from 'react';
 import animateScrollTo from 'animated-scroll-to';
 import { invert } from 'lodash/object';
-import { Data } from '../data';
-import { tokenize, fts } from '../search';
-import { agreeWithNum } from '../utils/agree-with-num';
-import updateState from '../utils/update-state';
-import DateFilter from './search/date-filter';
-
 import {
   Row,
   Col,
@@ -14,14 +8,24 @@ import {
   InputGroup,
   Dropdown,
   Button,
-  Alert
+  Alert,
+  Card,
 } from 'react-bootstrap';
 
+import { Data } from '../data';
+import fts, { tokenize } from '../utils/full-text-search';
+import config from '../../../config/config.json';
+import agreeWithNum from '../utils/agree-with-num';
+import updateState from '../utils/update-state';
+import DateFilter from './search/date-filter';
+import BasePage from './base-page';
 import {
   SegmentsList,
   GamesList,
-  ResultsPagination
+  ResultsPagination,
 } from './search/results';
+import BigSpinner from './big-spinner';
+import Matomo from '../matomo';
 
 class InteractiveSearch extends React.Component {
   constructor(props) {
@@ -33,37 +37,42 @@ class InteractiveSearch extends React.Component {
       data: {
         segments: null,
         categories: null,
-        games: null
+        games: null,
       },
       filters: {
         text: '',
         category: 'any',
         dateStart: null,
-        dateEnd: null
+        dateEnd: null,
       },
       sorting: {
         mode: 'date',
-        desc: true
+        desc: true,
       },
       results: {
         mode: null,
         items: [],
-        page: 0
-      }
+        page: 0,
+      },
     };
+
+    this.submitForm = this.submitForm.bind(this);
+    this.onPageChange = this.onPageChange.bind(this);
   }
 
   loadData() {
-    return Data.then(({segments, categories, games}) => {
+    return Data.then(({ segments, categories, index }) => {
       updateState(this, {
-        data: { $merge: { segments, categories, games } },
-        loaded: { $set: true }
+        data: { $merge: { segments, categories, index } },
+        loaded: { $set: true },
       });
     });
   }
 
   async componentDidMount() {
     await this.loadData();
+    document.title = `Главная страница | ${config.title}`;
+    Matomo.trackPageView();
     this.submitForm();
   }
 
@@ -72,19 +81,20 @@ class InteractiveSearch extends React.Component {
       event.preventDefault();
     }
 
+    const { mode, data: { segments, index }, filters } = this.state;
     let chain;
 
-    if (this.state.mode === 'segments') {
-      chain = this.state.data.segments.chain();
+    if (mode === 'segments') {
+      chain = segments.chain();
 
       {
-        let { dateStart, dateEnd } = this.state.filters;
-  
+        const { filters: { dateStart, dateEnd } } = this.state;
+
         if (dateStart) {
           if (dateEnd) {
-            chain = chain.find({ date: { $between: [
-              dateStart, dateEnd
-            ] } });
+            chain = chain.find({
+              date: { $between: [dateStart, dateEnd] },
+            });
           } else {
             chain = chain.find({ date: { $dteq: dateStart } });
           }
@@ -92,11 +102,11 @@ class InteractiveSearch extends React.Component {
       }
 
       chain = chain.find({ games: { $size: { $gt: 0 } } });
-    } else if (this.state.mode === 'games') {
-      chain = this.state.data.games.chain()
+    } else if (mode === 'games') {
+      chain = index.chain();
 
-      let { category } = this.state.filters;
-      if (category != 'any') {
+      const { category } = filters;
+      if (category !== 'any') {
         chain = chain.find({ 'category.id': category });
       }
 
@@ -104,11 +114,11 @@ class InteractiveSearch extends React.Component {
     }
 
     {
-      let { mode, desc } = this.state.sorting;
+      const { sorting: { mode: sortMode, desc } } = this.state;
 
-      if (mode === 'date') {
+      if (sortMode === 'date') {
         chain = chain.compoundsort([['date', desc], ['segment', desc]]);
-      } else if (mode === 'stream_count' && this.state.mode === 'games') {
+      } else if (sortMode === 'stream_count' && mode === 'games') {
         chain = chain.compoundsort([['streams', desc], ['date', desc], ['segment', desc]]);
       }
     }
@@ -116,162 +126,207 @@ class InteractiveSearch extends React.Component {
     let results = chain.data();
 
     {
-      let { text } = this.state.filters;
+      const { filters: { text } } = this.state;
 
       if (tokenize(text).length > 0) {
         results = fts(text, results, ({ name }) => name);
+
+        if (event) {
+          Matomo.trackSiteSearch({
+            keyword: text,
+            category: mode,
+            count: results.length,
+          });
+        }
       }
     }
-  
+
     updateState(this, {
-      results: { $merge: {
-        mode: this.state.mode,
-        items: results,
-        page: 0
-      } }
+      results: {
+        $merge: {
+          mode,
+          items: results,
+          page: 0,
+        },
+      },
     });
   }
 
   filters() {
-    const { segments, categories } = this.state.data;
+    const {
+      data: { segments, categories },
+      mode, filters, sorting,
+    } = this.state;
 
-    let filters = [];
+    const components = [];
 
-    if (this.state.mode === 'segments') {
-      let minDate = new Date(segments.min('date'));
-      let maxDate = new Date(segments.max('date'));
+    if (mode === 'segments') {
+      const minDate = new Date(segments.min('date'));
+      const maxDate = new Date(segments.max('date'));
 
-      filters.push(
-        <DateFilter key="date" xs={12} sm={8} md={6} lg={4}
+      components.push(
+        <DateFilter
+          key="date"
+          xs={12}
+          sm={8}
+          md={6}
+          lg={4}
           minDate={minDate}
           maxDate={maxDate}
           tileContent={({ date, view }) => {
-            if (view === 'month' || date > maxDate) return;
-            let range = DateFilter.dateToRange(date, view);
-            let count = segments.count({ date: { $between: range } });
-            return <div>{count} {agreeWithNum(count, 'стрим', ['', 'а', 'ов'])}</div>;
+            if (view === 'month' || date > maxDate) return null;
+            const range = DateFilter.dateToRange(date, view);
+            const count = segments.count({ date: { $between: range } });
+            return (
+              <div>
+                {count}
+                {' '}
+                {agreeWithNum(count, 'стрим', ['', 'а', 'ов'])}
+              </div>
+            );
           }}
           tileClassName={({ date, view }) => {
-            if (view !== 'month') return;
-            let count = segments.count({ date: { $dteq: date } });
+            if (view !== 'month') return null;
+            const count = segments.count({ date: { $dteq: date } });
             return count > 0 ? 'bg-lightgreen' : 'bg-lightcoral';
           }}
           onChange={(start, end) => updateState(this, {
             filters: {
               dateStart: { $set: start },
-              dateEnd: { $set: end }
-            }
-          }, this.submitForm.bind(this))} />
+              dateEnd: { $set: end },
+            },
+          }, this.submitForm)}
+        />,
       );
-    } else if (this.state.mode === 'games') {
-      {
-        let { category } = this.state.filters;
+    } else if (mode === 'games') {
+      const { category } = filters;
 
-        let catMap = Object.assign({ any: 'Любая' },
-          ...Object.values(categories.data)
-            .filter(({ search }) => search !== false)
-            .map(({ id, name }) => ({ [id]: name }))
-        );
+      const catMap = Object.assign({ any: 'Любая' },
+        ...Object.values(categories.data)
+          .filter(({ search }) => search !== false)
+          .map(({ id, name }) => ({ [id]: name })));
 
-        let invCatMap = invert(catMap);
+      const invCatMap = invert(catMap);
 
-        filters.push(
-          <InputGroup key="category" xs={12} sm={8} md={6} lg={4} as={Col}>
-            <InputGroup.Prepend>
-              <InputGroup.Text>Категория:</InputGroup.Text>
-            </InputGroup.Prepend>
-            <Form.Control as="select" custom
-              value={catMap[category]}
-              onChange={({ target: { value } }) => updateState(this, {
-                filters: { category: { $set: invCatMap[value] } }
-              }, this.submitForm.bind(this))}>
-                {Object.entries(catMap).map(([key, name]) => (
-                  <option key={key}>{name}</option>
-                ))}
-            </Form.Control>
-          </InputGroup>
-        );
-      }
+      components.push(
+        <InputGroup key="category" xs={12} sm={8} md={6} lg={4} as={Col}>
+          <InputGroup.Prepend>
+            <InputGroup.Text>Категория:</InputGroup.Text>
+          </InputGroup.Prepend>
+          <Form.Control
+            as="select"
+            custom
+            value={catMap[category]}
+            onChange={({ target: { value } }) => updateState(this, {
+              filters: { category: { $set: invCatMap[value] } },
+            }, this.submitForm)}
+          >
+            {Object.entries(catMap).map(([key, name]) => (
+              <option key={key}>{name}</option>
+            ))}
+          </Form.Control>
+        </InputGroup>,
+      );
     }
 
     {
-      let { mode, desc } = this.state.sorting;
+      const { mode: sortMode, desc } = sorting;
 
-      let sortModes = {
-        date: 'дата'
+      const sortModes = {
+        date: 'дата',
       };
 
-      if (this.state.mode === 'games') {
+      if (mode === 'games') {
         sortModes.stream_count = 'стримы';
       }
 
-      let invSortModes = invert(sortModes);
+      const invSortModes = invert(sortModes);
 
-      filters.push(
+      components.push(
         <InputGroup key="sorting" xs={12} sm={8} md={6} lg={4} as={Col}>
           <InputGroup.Prepend>
             <InputGroup.Text>Сортировка:</InputGroup.Text>
           </InputGroup.Prepend>
-          <Form.Control as="select" custom
-            value={sortModes[mode]}
+          <Form.Control
+            as="select"
+            custom
+            value={sortModes[sortMode]}
             onChange={({ target: { value } }) => updateState(this, {
-              sorting: { mode: { $set: invSortModes[value] } }
-            }, this.submitForm.bind(this))}>
-              {Object.entries(sortModes).map(([key, name]) => (
-                <option key={key}>{name}</option>
-              ))}
+              sorting: { mode: { $set: invSortModes[value] } },
+            }, this.submitForm)}
+          >
+            {Object.entries(sortModes).map(([key, name]) => (
+              <option key={key}>{name}</option>
+            ))}
           </Form.Control>
           <InputGroup.Append>
-            <Button variant="secondary"
+            <Button
+              variant="dark"
               onClick={() => updateState(this, {
-                sorting: { $toggle: ['desc'] }
-              }, this.submitForm.bind(this))}>
-                {desc ? '↓' : '↑'}
+                sorting: { $toggle: ['desc'] },
+              }, this.submitForm)}
+            >
+              {desc ? (
+                <i className="fas fa-sort-amount-down" />
+              ) : (
+                <i className="fas fa-sort-amount-up" />
+              )}
             </Button>
           </InputGroup.Append>
-        </InputGroup>
+        </InputGroup>,
       );
     }
 
-    return <Form.Row>{filters}</Form.Row>;
+    return <Form.Row>{components}</Form.Row>;
   }
 
   inputForm() {
+    const { mode } = this.state;
+
     return (
-      <Form onSubmit={this.submitForm.bind(this)}>
+      <Form onSubmit={this.submitForm}>
         <InputGroup>
           <InputGroup.Prepend>
             <Dropdown>
               <Dropdown.Toggle variant="success">
-                {this.state.mode === 'segments' ? 'Стримы' : 'Игры'}
+                {mode === 'segments' ? 'Стримы' : 'Игры'}
               </Dropdown.Toggle>
               <Dropdown.Menu>
                 <Dropdown.Item
+                  active={mode === 'segments'}
                   onClick={() => updateState(this, {
                     mode: { $set: 'segments' },
                     sorting: {
-                      mode: { $set: 'date' }
-                    }
-                  }, this.submitForm.bind(this))}>Стримы</Dropdown.Item>
+                      mode: { $set: 'date' },
+                    },
+                  }, this.submitForm)}
+                >
+                  Стримы
+                </Dropdown.Item>
                 <Dropdown.Item
+                  active={mode === 'games'}
                   onClick={() => updateState(this, {
                     mode: { $set: 'games' },
                     sorting: {
-                      mode: { $set: 'date' }
-                    }
-                  }, this.submitForm.bind(this))}>Игры</Dropdown.Item>
+                      mode: { $set: 'date' },
+                    },
+                  }, this.submitForm)}
+                >
+                  Игры
+                </Dropdown.Item>
               </Dropdown.Menu>
             </Dropdown>
           </InputGroup.Prepend>
           <Form.Control
             onChange={(event) => updateState(this, {
-              filters: { text: { $set: event.target.value } }
+              filters: { text: { $set: event.target.value } },
             })}
-            onKeyPress={(event) => { event.code == 'Enter' && this.submitForm(event) }}
+            onKeyPress={(event) => { if (event.code === 'Enter') this.submitForm(event); }}
             type="text"
-            placeholder="Поиск по названию" />
+            placeholder="Поиск по названию"
+          />
           <InputGroup.Append>
-            <Button variant="primary" onClick={this.submitForm.bind(this)}>Найти</Button>
+            <Button variant="primary" onClick={this.submitForm}>Найти</Button>
           </InputGroup.Append>
         </InputGroup>
         {this.filters()}
@@ -279,53 +334,58 @@ class InteractiveSearch extends React.Component {
     );
   }
 
-  resultsRenderer() {
-    if (this.state.results.mode === 'segments') {
-      return SegmentsList;
-    } else if (this.state.results.mode === 'games') {
-      return GamesList;
-    }
+  onPageChange(newPage) {
+    updateState(this, {
+      results: {
+        page: { $set: newPage },
+      },
+    });
 
-    return null;
+    animateScrollTo(0);
   }
 
   render() {
-    if (!this.state.loaded) {
-      return (
-        <div>loading...</div>
-      );
+    const { data, loaded, results: { items, page, mode } } = this.state;
+
+    if (!loaded) {
+      return <BigSpinner />;
     }
 
-    let renderer = this.resultsRenderer();
+    let renderer = null;
+    if (mode === 'segments') {
+      renderer = SegmentsList;
+    } if (mode === 'games') {
+      renderer = GamesList;
+    }
 
     return (
-      <>
-        <Row>
+      <BasePage>
+        <Row className="pt-3">
           <Col>
-            <Alert variant="warning">
+            <Alert variant="dark">
               Поиск ещё находится на стадии разработки. Я планирую добавить больше
               фильтров, сортировку результатов и доработать оформление :)
             </Alert>
           </Col>
         </Row>
         <Row className="interactive-search-form">
-          <Col>{this.inputForm()}</Col>
+          <Col>
+            <Card className="w-100 h-0 pl-3 pr-3 pt-3 pb-2">
+              {this.inputForm()}
+            </Card>
+          </Col>
         </Row>
-        {renderer ? <ResultsPagination
-          items={this.state.results.items}
-          page={this.state.results.page}
-          onPageChange={(page) => {
-            updateState(this, {
-              results: {
-                page: { $set: page }
-              }
-            });
-            animateScrollTo(0);
-          }}
-          max={10}
-          renderer={this.resultsRenderer()}
-          rendererProps={{ data: { ...this.state.data } }} /> : null}
-      </>
+        {renderer ? (
+          <ResultsPagination
+            items={items}
+            page={page}
+            onPageChange={this.onPageChange}
+            max={10}
+            renderer={renderer}
+            rendererProps={{ data: { ...data } }}
+          />
+        ) : null}
+      </BasePage>
     );
   }
 }

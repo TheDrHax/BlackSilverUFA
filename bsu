@@ -3,7 +3,7 @@
 export PYTHON="python3"
 export VENV="_python"
 export NODEENV="_node"
-export PATH="$PWD/$VENV/bin:$PWD/$NODEENV/bin:$PATH"
+export PATH="$PWD/$VENV/bin:$PWD/node_modules/.bin:$PWD/$NODEENV/bin:$PATH"
 export PREFIX="./_site"
 
 export GIT_REMOTE="origin"
@@ -58,6 +58,7 @@ node_setup() { # [force | silent]
     fi
 
     npm install || exit 1
+    [ -e "$PWD/node_modules/.cache" ] && rm -rf "$PWD/node_modules/.cache"
 
     md5sum "package.json" "package-lock.json" > "$MD5_FILE"
 }
@@ -212,7 +213,7 @@ case $1 in
     debug) shift; DEBUG=1 $PYTHON -m src.utils.serve $@ ;;
     react)
         DEBUG=1 ./bsu build --no-webpack
-        HMR=1 npx webpack-dev-server --config src/js/webpack.config.js ;;
+        HMR=1 webpack serve --host 0.0.0.0 --config src/js/webpack.config.js ;;
     download-chats) $PYTHON -m src.utils.chats ;;
     sh|bash) "$@" ;;
     cli)

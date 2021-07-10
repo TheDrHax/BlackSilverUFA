@@ -1,11 +1,9 @@
 attrs==19.3.0
-babel==2.6.0
 beautifulsoup4==4.8.2
 docopt==0.6.2
 GitPython==3.1.0
 livereload==2.6.2
 mako==1.0.9
-pymorphy2==0.8
 requests==2.21.0
 sortedcontainers==2.1.0
 tdh-tcd==2.4.7

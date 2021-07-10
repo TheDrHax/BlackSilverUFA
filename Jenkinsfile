@@ -2,8 +2,8 @@ node('python3 && git && jq && (tzdata || !alpine)') {
     String cred_git = 'GitHub'
     String cred_github = 'GitHub-Token'
 
-    String github_account = 'TheDrHax'
-    String github_repo = 'BlackSilverUfa'
+    String github_account = 'BlackSilverUfa'
+    String github_repo = 'BlackSilverUfa-Beta'
     String input_branch = 'master'
 
     String repo_url = 'git@github.com:' + github_account + '/' + github_repo + '.git'

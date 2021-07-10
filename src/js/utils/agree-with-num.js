@@ -1,9 +1,9 @@
-function agreeWithNum(number, word, endings) {
+export default function agreeWithNum(number, word, endings) {
   if (number >= 20) {
-    number = number % 10;
+    number %= 10;
   }
 
-  if (number == 1) {
+  if (number === 1) {
     return word + endings[0];
   }
 
@@ -11,9 +11,9 @@ function agreeWithNum(number, word, endings) {
     return word + endings[1];
   }
 
-  if (number == 0 || number >= 5) {
+  if (number === 0 || number >= 5) {
     return word + endings[2];
   }
-}
 
-export { agreeWithNum };
+  throw new Error('WTF');
+}

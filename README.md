@@ -1,6 +1,6 @@
-# Архив стримов BlackUFA [![Build Status](https://jenkins.thedrhax.pw/job/BlackSilverUfa/badge/icon)](https://jenkins.thedrhax.pw/job/BlackSilverUfa/)
+# Архив стримов BlackUFA [![Build Status](https://jenkins.thedrhax.pw/job/BlackSilverUfa-Beta/badge/icon)](https://jenkins.thedrhax.pw/job/BlackSilverUfa-Beta/)
 
-Перейдите на [GitHub Pages](https://blackufa.thedrhax.pw) для доступа ко всем функциям ![](https://static-cdn.jtvnw.net/emoticons/v1/81274/1.0)
+Перейдите на [GitHub Pages](https://blackufa-beta.thedrhax.pw) для доступа ко всем функциям ![](https://static-cdn.jtvnw.net/emoticons/v1/81274/1.0)
 
 ### Зависимости
 

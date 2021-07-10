@@ -70,6 +70,9 @@ def build_data():
     # Generate preprocessed categories.json
     categories.save(_('data/categories.json'), compiled=True)
 
+    # Generate preprocessed games.json
+    games.save(_('data/games.json'), compiled=True)
+
 
 @timed('Mako templates built in {}ms')
 def build_mako():
@@ -87,27 +90,21 @@ def build_mako():
     # Recreate required directories
     if not os.path.isdir(_('')):
         os.mkdir(_(''))
+
+    # Legacy cleanup
     for dp in ['links', 'r']:
         if os.path.isdir(_(dp)):
             shutil.rmtree(_(dp))
-        os.mkdir(_(dp))
 
-    # Generate index.html, all.html, missing.html
-    for i in ['index', 'search', 'missing']:
+    for fp in ['search.html', 'missing.html']:
+        if os.path.exists(_(fp)):
+            os.unlink(_(fp))
+
+    # Generate index.html, 404.html
+    for i in ['index', '404']:
         with open(_(i + '.html'), 'w') as out:
             t = lookup.get_template(f'/{i}.mako')
             out.write(t.render(**env))
-
-    # Generate redirects
-    with open(_('r/index.html'), 'w') as out:
-        t = lookup.get_template(f'/redirect.mako')
-        out.write(t.render(**env))
-
-    # Generate links/*.html
-    t = lookup.get_template('/links.mako')
-    for game in games:
-        with open(_(game.filename), 'w') as out:
-            out.write(t.render(game=game, **env).strip())
 
 
 @timed('Webpack completed in {}ms')
@@ -118,7 +115,7 @@ def build_webpack():
     os.mkdir(_('dist'))
 
     # Webpack
-    call(['npx', 'webpack', '--config', 'src/js/webpack.config.js'])
+    call(['webpack', '--config', 'src/js/webpack.config.js'])
 
 
 @timed('Build completed in {}ms')
@@ -138,6 +135,13 @@ def generate(argv=None):
     if os.path.isdir(_('static')):
         shutil.rmtree(_('static'))
     shutil.copytree('static', _('static'))
+
+    # Create CNAME
+    if config['domain']:
+        with open(_('CNAME'), 'w') as fo:
+            fo.write(config['domain'])
+    elif os.path.exists(_('CNAME')):
+        os.unlink(_('CNAME'))
 
     build_data()
     if not args['--no-webpack']:

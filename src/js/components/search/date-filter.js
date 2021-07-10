@@ -1,21 +1,29 @@
 import React from 'react';
+import PropTypes from 'prop-types';
 import DatePicker from 'react-date-picker';
-import updateState from '../../utils/update-state';
-import Sugar from '../../utils/sugar';
-
 import {
   InputGroup,
   Col,
   Dropdown,
   Form,
-  Button
+  Button,
 } from 'react-bootstrap';
+import updateState from '../../utils/update-state';
+import Sugar from '../../utils/sugar';
 
 export default class DateFilter extends React.Component {
+  static propTypes = {
+    onChange: PropTypes.func,
+  }
+
+  static defaultProps = {
+    onChange: () => null,
+  }
+
   scales = {
     month: 'День',
     year: 'Месяц',
-    decade: 'Год'
+    decade: 'Год',
   }
 
   static dateToRange(date, scale) {
@@ -23,7 +31,7 @@ export default class DateFilter extends React.Component {
       return [null, null];
     }
 
-    let start = new Date(date);
+    const start = new Date(date);
 
     if (scale === 'year') {
       Sugar.Date.reset(start, 'month');
@@ -31,7 +39,7 @@ export default class DateFilter extends React.Component {
       Sugar.Date.reset(start, 'year');
     }
 
-    let end = new Date(start);
+    const end = new Date(start);
 
     if (scale === 'year') {
       Sugar.Date.advance(end, { months: 1 });
@@ -50,55 +58,60 @@ export default class DateFilter extends React.Component {
     this.state = {
       start: null,
       end: null,
-      scale: 'year'
-    }
+      scale: 'year',
+    };
   }
 
   onChange(spec) {
     updateState(this, spec, () => {
-      if (this.props.onChange) {
-        let { start, end, scale } = this.state;
+      let { start, end } = this.state;
+      const { scale } = this.state;
+      const { onChange } = this.props;
 
-        if (scale === 'year' || scale === 'decade') {
-          [start, end] = DateFilter.dateToRange(start, scale);
-        }
-
-        this.props.onChange(start, end);
+      if (scale === 'year' || scale === 'decade') {
+        [start, end] = DateFilter.dateToRange(start, scale);
       }
+
+      onChange(start, end);
     });
   }
 
   render() {
-    let { minDate, maxDate, tileContent, tileClassName } = this.props;
-    let { start, end, scale } = this.state;
+    const { minDate, maxDate, tileContent, tileClassName } = this.props;
+    const { start, end, scale } = this.state;
 
-    let datePickerOptions = {
+    const datePickerOptions = {
       maxDate,
       minDetail: 'decade',
       maxDetail: scale,
       locale: 'ru-RU',
       tileContent,
       tileClassName,
-      showLeadingZeros: true
+      showLeadingZeros: true,
     };
 
-    let { xs, sm, md, lg, xl } = this.props;
+    const { xs, sm, md, lg, xl } = this.props;
 
     return (
       <InputGroup as={Col} {...{ xs, sm, md, lg, xl }}>
         <InputGroup.Prepend>
           <Dropdown>
-            <Dropdown.Toggle variant="secondary">
+            <Dropdown.Toggle variant="dark">
               {this.scales[scale]}
             </Dropdown.Toggle>
             <Dropdown.Menu>
-              {Object.entries(this.scales).map(([scale, name]) => (
-                <Dropdown.Item key={scale}
+              {Object.entries(this.scales).map(([key, name]) => (
+                <Dropdown.Item
+                  key={key}
+                  active={key === scale}
                   onClick={() => this.onChange({
                     start: { $set: null },
                     end: { $set: null },
-                    scale: { $set: scale }
-                  })}>{name}</Dropdown.Item>
+                    scale: { $set: key },
+                  })}
+                >
+                  {name}
+                </Dropdown.Item>
               ))}
             </Dropdown.Menu>
           </Dropdown>
@@ -108,23 +121,28 @@ export default class DateFilter extends React.Component {
           value={start}
           onChange={(date) => this.onChange({ start: { $set: date } })}
           minDate={minDate}
-          {...datePickerOptions} />
+          {...datePickerOptions}
+        />
         {scale === 'month' && (
           <Form.Control
             as={DatePicker}
             value={end}
             onChange={(date) => this.onChange({ end: { $set: date } })}
             minDate={start || minDate}
-            {...datePickerOptions} />
+            {...datePickerOptions}
+          />
         )}
         {start && (
           <InputGroup.Append>
-            <Button variant="danger"
+            <Button
+              variant="danger"
               onClick={() => this.onChange({
                 start: { $set: null },
                 end: { $set: null },
-                scale: { $set: 'year' }
-              })}>x</Button>
+                scale: { $set: 'year' },
+              })}
+            >x
+            </Button>
           </InputGroup.Append>
         )}
       </InputGroup>

@@ -1,10 +1,10 @@
 {
   "title": "Архив стримов BlackUFA",
-  "prefix": "https://blackufa.thedrhax.pw",
-  "dev_prefix": "http://localhost:8000",
+  "domain": "blackufa-beta.thedrhax.pw",
+  "prefix": "https://blackufa-beta.thedrhax.pw",
   "github": {
-    "user": "TheDrHax",
-    "repo": "BlackSilverUfa"
+    "user": "BlackSilverUfa",
+    "repo": "BlackSilverUfa-Beta"
   },
   "versions": {
     "data": {
